@@ -20,6 +20,8 @@ from pydantic import BaseModel, ValidationError, model_validator
 from pypdf import PdfReader
 from supabase import Client, create_client
 
+from llm_dev import record_spoken_request
+
 
 # 1. Describe the structured response that the app expects from the model.
 class ScopeItem(BaseModel):
@@ -451,17 +453,28 @@ def main() -> None:
         st.session_state.pop("pdf_error", None)
         st.caption("You can also paste or edit the original estimate below.")
 
-    with st.form("scope_comparison"):
-        left, right = st.columns(2)
-        with left:
-            estimate = st.text_area(
-                "Original estimate", key="estimate_text", height=250, max_chars=20000
-            )
-        with right:
-            request = st.text_area(
-                "New customer request", value=SAMPLE_REQUEST, height=250, max_chars=5000
-            )
-        submitted = st.form_submit_button("Compare scope", type="primary")
+    st.session_state.setdefault("request_text", SAMPLE_REQUEST)
+    left, right = st.columns(2)
+    with left:
+        estimate = st.text_area(
+            "Original estimate", key="estimate_text", height=250, max_chars=20000
+        )
+    with right:
+        if st.button("🎤 Record request"):
+            try:
+                with st.spinner("Listening... speak the customer's request, then pause."):
+                    transcript = record_spoken_request()
+                if transcript.strip():
+                    st.session_state["request_text"] = transcript.strip()
+                    st.rerun()
+                else:
+                    st.warning("Didn't catch anything. Try again and speak clearly.")
+            except Exception as error:
+                st.error(f"Could not record: {error}")
+        request = st.text_area(
+            "New customer request", key="request_text", height=250, max_chars=5000
+        )
+    submitted = st.button("Compare scope", type="primary")
 
     if submitted:
         # Clear the previous result, including when a new request fails.
